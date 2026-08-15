@@ -280,6 +280,7 @@
     color: var(--muted);
     text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
   }
+  .bio[hidden] { display: none; }   /* offline → line disappears entirely */
 
   /* ============================================================
      LINK BUTTONS — rendered from the CONFIG array below.
@@ -856,11 +857,20 @@ function syncAvatar(data) {
 }
 
 /* Live status in the bio line: your custom status ("what's on your mind")
-   shows where the tagline sits, updating live — falls back to the
-   tagline when no custom status is set. */
+   shows where the tagline sits, updating live. Falls back to the tagline
+   while online with no status set — and disappears entirely when offline. */
 function syncStatusLine(data) {
   const custom = (data.activities || []).find(a => a.type === 4 && (a.state || (a.emoji && a.emoji.name)));
-  if (!custom) { bioTextEl.textContent = CONFIG.tagline; return; }
+  if (!custom) {
+    if ((data.discord_status || "offline") === "offline") {
+      bioTextEl.textContent = "";          // offline → no status to show, hide the line
+      bioTextEl.hidden = true;
+    } else {
+      bioTextEl.textContent = CONFIG.tagline;   // online, no status → tagline
+      bioTextEl.hidden = false;
+    }
+    return;
+  }
   const emo = custom.emoji || {};
   let emojiHtml = "";
   if (emo.name) {
@@ -869,6 +879,7 @@ function syncStatusLine(data) {
       : `<span aria-hidden="true">${emo.name}</span> `;   // plain unicode emoji
   }
   bioTextEl.innerHTML = emojiHtml + escapeHtml(custom.state || "");
+  bioTextEl.hidden = false;
 }
 
 /* Build the activity panel: Spotify → games/streams/etc.

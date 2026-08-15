@@ -180,6 +180,25 @@
     background: #3ddc84;
     flex-shrink: 0;
   }
+  /* ---------- live custom status text line (synced from Discord) ---------- */
+  .status-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--muted);
+    background: rgba(28, 14, 48, 0.45);
+    border: 1px solid var(--link-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .status-line[hidden] { display: none; }
+  .status-line img.emoji { width: 18px; height: 18px; object-fit: contain; }
   /* ---------- live activity panel (games / Spotify / custom status) ---------- */
   .activities {
     list-style: none;
@@ -502,7 +521,10 @@
     <!-- Discord presence badge — status word + dot, live via Lanyard (see JS) -->
     <span class="presence"><span class="dot"></span><span id="presenceText">—</span></span>
 
-    <!-- live activity panel: custom status, games, Spotify (filled by JS) -->
+    <!-- live custom status line ("what's on your mind"), synced from Discord -->
+    <div class="status-line" id="statusLine" hidden></div>
+
+    <!-- live activity panel: games, Spotify, watching (filled by JS) -->
     <ul class="activities" id="activityList" hidden></ul>
 
     <p class="bio" id="bioText">—</p>
@@ -780,6 +802,8 @@ const ACTIVITY_VERBS = { 0: "playing", 1: "streaming", 2: "listening to", 3: "wa
 const dotEl = document.querySelector(".status-dot");
 const pillText = document.getElementById("presenceText");
 const actList = document.getElementById("activityList");
+const avatarImg = document.getElementById("avatarImg");
+const statusLine = document.getElementById("statusLine");
 
 /* small stroke icons for activity rows (game / stream / listen / watch / custom / compete) */
 const ACTIVITY_ICONS = {
@@ -825,29 +849,56 @@ function fmtElapsed(startMs) {
   return m ? `for ${h}h ${m}m` : `for ${h}h`;
 }
 
-/* Build the activity panel: custom status → Spotify → games/streams/etc.
+/* Escape user-supplied text (custom status) before injecting it as HTML */
+const escapeHtml = s => String(s).replace(/[&<>"']/g,
+  c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* Keep the profile picture in sync with Discord. Lanyard reports the
+   CURRENT avatar hash, so changing your avatar in Discord updates the
+   site within seconds (animated avatars load as .gif automatically). */
+function syncAvatar(data) {
+  const u = data.discord_user;
+  if (!u || !u.avatar) return;                        // no profile data yet → keep current image
+  const ext = u.avatar.startsWith("a_") ? "gif" : "png";
+  const src = `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${ext}?size=256`;
+  if (avatarImg.getAttribute("src") !== src) {
+    avatarImg.src = src;
+    avatarImg.style.display = "";                    // unhide if a stale URL had hidden it
+  }
+}
+
+/* Discord-style status line: your custom status ("what's on your mind")
+   with its emoji — updates live whenever you change it in Discord. */
+function syncStatusLine(data) {
+  const custom = (data.activities || []).find(a => a.type === 4 && (a.state || (a.emoji && a.emoji.name)));
+  if (!custom) { statusLine.hidden = true; statusLine.textContent = ""; return; }
+  const emo = custom.emoji || {};
+  let emojiHtml = "";
+  if (emo.name) {
+    emojiHtml = emo.id
+      ? `<img class="emoji" alt="" src="https://cdn.discordapp.com/emojis/${emo.id}.${emo.animated ? "gif" : "png"}">`
+      : `<span aria-hidden="true">${emo.name}</span> `;   // plain unicode emoji
+  }
+  statusLine.innerHTML = emojiHtml + escapeHtml(custom.state || "");
+  statusLine.hidden = false;
+}
+
+/* Build the activity panel: Spotify → games/streams/etc.
+   (custom status lives in the status line above, Discord-style)
    Badge (dot + status word) is handled separately in renderPresence. */
 function renderActivities(data) {
   actList.innerHTML = "";
   const acts = data.activities || [];
   const rows = [];
 
-  // 1) custom status — "the text you put for your status" in Discord
-  const custom = acts.find(a => a.type === 4 && (a.state || (a.emoji && a.emoji.name)));
-  if (custom) {
-    const emoji = custom.emoji && custom.emoji.name ? custom.emoji.name + " " : "";
-    rows.push({ icon: 4, title: emoji + (custom.state || ""), detail: "", art: null,
-                start: custom.timestamps && custom.timestamps.start });
-  }
-
-  // 2) Spotify now-playing (album art + song — artist)
+  // 1) Spotify now-playing (album art + song — artist)
   if (data.listening_to_spotify && data.spotify) {
     rows.push({ icon: 2, title: data.spotify.song, detail: data.spotify.artist,
                 art: data.spotify.album_art_url, alt: "Album art",
                 start: data.spotify.timestamps && data.spotify.timestamps.start });
   }
 
-  // 3) everything else: games, watching, streaming, competing (with real artwork)
+  // 2) everything else: games, watching, streaming, competing (with real artwork)
   acts.filter(a => a.type !== 4 && !(a.type === 2 && data.listening_to_spotify)).forEach(a => {
     const verb = ACTIVITY_VERBS[a.type] || "playing";
     const art = resolveActivityArt(a);
@@ -917,14 +968,16 @@ function renderActivities(data) {
 }
 
 /* Turn one Lanyard presence payload into badge + dot state.
-   The badge shows the status word (Discord-style); the activity
-   panel below carries custom status, games, and now-playing. */
+   Also syncs the avatar and the custom-status line; the activity
+   panel below carries games, Spotify, and watching/streaming. */
 function renderPresence(data) {
   lastPresence = data;
   const status = data.discord_status || "offline";
   dotEl.style.background = STATUS_COLORS[status] || STATUS_COLORS.offline;
   dotEl.classList.toggle("live-online", status === "online");
   pillText.textContent = status === "dnd" ? "do not disturb" : status;
+  syncAvatar(data);
+  syncStatusLine(data);
   renderActivities(data);
 }
 

@@ -468,8 +468,10 @@
   </button>
 
   <!-- ============================================================
-       VIEWS COUNTER — REAL data from Busuanzi (free hit-counter
-       service, no account needed). Filled by the JS module below.
+       VIEWS COUNTER — guns.lol-style: shows UNIQUE visitors only
+       (each real person counts once; refreshing never bumps it).
+       Data comes from the Cloudflare Worker /api/views, filled by
+       the JS module below.
        ============================================================ -->
   <div class="views-pill" role="status" aria-live="polite">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -604,17 +606,13 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ================================================================
-   REAL VIEWS COUNTER — no more fake numbers.
-   Powered by Busuanzi (busuanzi.ibruce.info), a free hit-counter
-   service with no account needed. Returns real page views + unique
-   visitors via JSONP (script tags work from any host, even file://).
-
-   NOTE: Busuanzi batches updates server-side, so numbers can lag a
-   minute or two — real, but not instant. Want analytics-grade
-   accuracy? Swap in GoatCounter (free; needs an account) later.
-
-   If the service is unreachable, it falls back to counting on this
-   device (localStorage) so the pill never shows a fake number.
+   REAL VIEWS COUNTER — guns.lol-style: shows UNIQUE visitors only,
+   so refreshing the page never bumps your own number. Tiers:
+     1) own Cloudflare Worker /api/views  (immune to ad-blockers)
+     2) Busuanzi (busuanzi.ibruce.info)   — free hit-counter, no
+        account needed; returns unique visitors via JSONP
+     3) local per-device count, labeled "(local)" so it's never
+        mistaken for the real number.
    ================================================================ */
 (function initViews() {
   const el = document.getElementById("viewCount");
@@ -644,7 +642,7 @@ document.addEventListener("DOMContentLoaded", () => {
     LS.set("views-local", String(n));
     animate(n);
     if (uniqEl) uniqEl.textContent = "(local)";
-    console.warn("Busuanzi unreachable (blocked or offline) — showing a local per-device count.");
+    console.warn("Counters unreachable (blocked or offline) — showing a local per-device count.");
   };
 
   // ---- primary: same-origin counter worker (immune to ad-blockers) ----
@@ -654,12 +652,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const cbName = "busuanziCallback";
     window[cbName] = data => {                      // JSONP response handler
       cleanup();
-      const pv = data && data.page_pv != null ? Number(data.page_pv) : NaN;
-      if (!isNaN(pv)) {
-        LS.set("views-real", String(pv));           // remember last real value
-        animate(pv);
-        if (uniqEl && data.page_uv != null) uniqEl.textContent = `${Number(data.page_uv).toLocaleString("en-US")} unique`;
-        console.info(`[views] live count from busuanzi: ${pv} page views, ${data.page_uv != null ? data.page_uv + " unique" : "n/a"}`);
+      const uv = data && data.page_uv != null ? Number(data.page_uv) : NaN;
+      if (!isNaN(uv)) {
+        LS.set("views-real", String(uv));           // remember last real value
+        animate(uv);
+        console.info(`[views] live count from busuanzi: ${uv} unique views`);
       } else fallback();
     };
     const s = document.createElement("script");
@@ -673,11 +670,10 @@ document.addEventListener("DOMContentLoaded", () => {
   fetch("/api/views")
     .then(r => { if (!r.ok) throw new Error("counter endpoint not deployed (" + r.status + ")"); return r.json(); })
     .then(d => {
-      if (d && typeof d.views === "number") {
-        LS.set("views-real", String(d.views));      // remember last real value
-        animate(d.views);
-        if (uniqEl && d.unique != null) uniqEl.textContent = `${Number(d.unique).toLocaleString("en-US")} unique`;
-        console.info(`[views] live count from own origin: ${d.views} views, ${d.unique != null ? d.unique + " unique" : "n/a"}`);
+      if (d && typeof d.unique === "number") {
+        LS.set("views-real", String(d.unique));     // remember last real value
+        animate(d.unique);
+        console.info(`[views] live count from own origin: ${d.unique} unique views`);
       } else throw new Error("bad counter payload");
     })
     .catch(err => { console.warn("[views] own-origin counter unavailable — " + err.message); tryBusuanzi(); });

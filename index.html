@@ -180,15 +180,92 @@
     background: #3ddc84;
     flex-shrink: 0;
   }
-  /* small album-art thumbnail (shown while Spotify is playing) */
-  .pill-art {
-    width: 18px;
-    height: 18px;
-    border-radius: 5px;
-    display: none;
-    flex-shrink: 0;
+  /* ---------- live activity panel (games / Spotify / custom status) ---------- */
+  .activities {
+    list-style: none;
+    width: 100%;
+    max-width: 400px;                /* matches the link buttons */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 2px;
   }
-  .pill-art.show { display: block; }
+  .activities[hidden] { display: none; }   /* keep flex from overriding hidden */
+  .activities li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 16px;
+    background: rgba(28, 14, 48, 0.55);
+    border: 1px solid var(--link-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    text-align: left;
+    animation: rise 0.5s ease both;
+  }
+  .act-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(255, 95, 210, 0.25), rgba(139, 92, 246, 0.25));
+  }
+  .act-icon svg { width: 18px; height: 18px; color: var(--pink-soft); }
+  .act-art-wrap {
+    position: relative;
+    flex-shrink: 0;
+    line-height: 0;
+  }
+  .act-art {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+  /* small status badge overlaid on the artwork, like Discord */
+  .act-art-small {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    border: 2px solid #1d0f33;
+    background: #1d0f33;
+    object-fit: cover;
+  }
+  .act-body {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+    min-width: 0;
+  }
+  .act-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .act-detail {
+    font-size: 0.78rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .act-time {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.45);
+  }
 
   /* ---------- bio / tagline ---------- */
   .bio {
@@ -411,8 +488,11 @@
 
     <h1 class="name" id="displayName">—</h1>
 
-    <!-- Discord presence badge — text/dot go live via Lanyard (see JS) -->
-    <span class="presence"><span class="dot"></span><img class="pill-art" id="pillArt" alt="Album art"><span id="presenceText">—</span></span>
+    <!-- Discord presence badge — status word + dot, live via Lanyard (see JS) -->
+    <span class="presence"><span class="dot"></span><span id="presenceText">—</span></span>
+
+    <!-- live activity panel: custom status, games, Spotify (filled by JS) -->
+    <ul class="activities" id="activityList" hidden></ul>
 
     <p class="bio" id="bioText">—</p>
 
@@ -628,37 +708,159 @@ const STATUS_COLORS = { online: "#3ddc84", idle: "#faa61a", dnd: "#ed4245", offl
 const ACTIVITY_VERBS = { 0: "playing", 1: "streaming", 2: "listening to", 3: "watching", 5: "competing" };
 
 const dotEl = document.querySelector(".status-dot");
-const pillArt = document.getElementById("pillArt");
 const pillText = document.getElementById("presenceText");
+const actList = document.getElementById("activityList");
+
+/* small stroke icons for activity rows (game / stream / listen / watch / custom / compete) */
+const ACTIVITY_ICONS = {
+  0: '<rect x="2.5" y="7.5" width="19" height="9" rx="4.5"/><circle cx="6.5" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="9.7" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M15 10.5h4M17 8.5v4"/>',
+  1: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z" fill="currentColor" stroke="none"/>',
+  2: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/>',
+  3: '<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M8.5 2.5 12 6l3.5-3.5"/>',
+  4: '<path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/>',
+  5: '<path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3M12 14v4M8.5 21h7"/>',
+};
+
+/* Resolve Discord activity artwork into real image URLs:
+   - "mp:external/<hash>/https/<domain>/<path>" embeds the real (proxied) URL
+   - a plain asset key resolves via Discord's app-assets CDN
+   Returns { large, small, largeText, smallText } or null when unusable. */
+function resolveActivityArt(act) {
+  const a = act.assets;
+  if (!a) return null;
+  const resolve = key => {
+    if (!key) return null;
+    if (key.startsWith("mp:external/")) {            // decode the embedded URL
+      const p = key.split("/");
+      if (p.length < 4) return null;
+      return `${p[2]}://${p.slice(3).join("/")}`;
+    }
+    if (key.startsWith("spotify:")) return null;      // spotify handled separately
+    if (act.application_id) return `https://cdn.discordapp.com/app-assets/${act.application_id}/${key}.png`;
+    return null;
+  };
+  const large = resolve(a.large_image);
+  if (!large) return null;
+  return { large, small: resolve(a.small_image),
+           largeText: a.large_text || "", smallText: a.small_text || "" };
+}
+
+/* Format "for 12m" / "for 2h 5m" from an activity's start timestamp */
+function fmtElapsed(startMs) {
+  if (!startMs) return "";
+  const mins = Math.floor((Date.now() - startMs) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `for ${mins}m`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `for ${h}h ${m}m` : `for ${h}h`;
+}
+
+/* Build the activity panel: custom status → Spotify → games/streams/etc.
+   Badge (dot + status word) is handled separately in renderPresence. */
+function renderActivities(data) {
+  actList.innerHTML = "";
+  const acts = data.activities || [];
+  const rows = [];
+
+  // 1) custom status — "the text you put for your status" in Discord
+  const custom = acts.find(a => a.type === 4 && (a.state || (a.emoji && a.emoji.name)));
+  if (custom) {
+    const emoji = custom.emoji && custom.emoji.name ? custom.emoji.name + " " : "";
+    rows.push({ icon: 4, title: emoji + (custom.state || ""), detail: "", art: null,
+                start: custom.timestamps && custom.timestamps.start });
+  }
+
+  // 2) Spotify now-playing (album art + song — artist)
+  if (data.listening_to_spotify && data.spotify) {
+    rows.push({ icon: 2, title: data.spotify.song, detail: data.spotify.artist,
+                art: data.spotify.album_art_url, alt: "Album art",
+                start: data.spotify.timestamps && data.spotify.timestamps.start });
+  }
+
+  // 3) everything else: games, watching, streaming, competing (with real artwork)
+  acts.filter(a => a.type !== 4 && !(a.type === 2 && data.listening_to_spotify)).forEach(a => {
+    const verb = ACTIVITY_VERBS[a.type] || "playing";
+    const art = resolveActivityArt(a);
+    rows.push({ icon: a.type, title: `${verb} ${a.name}`, detail: a.details || a.state || "",
+                art: art && art.large, smallArt: art && art.small,
+                artTitle: art && art.largeText, smallTitle: art && art.smallText,
+                start: a.timestamps && a.timestamps.start });
+  });
+
+  rows.forEach(r => {
+    const li = document.createElement("li");
+    if (r.art) {
+      // Discord-style artwork card (with optional small overlay badge)
+      const wrap = document.createElement("span");
+      wrap.className = "act-art-wrap";
+      const img = document.createElement("img");
+      img.className = "act-art";
+      img.src = r.art;
+      img.alt = r.alt || "Artwork";
+      if (r.artTitle) img.title = r.artTitle;
+      img.onerror = () => {                        // artwork failed → icon tile
+        const tile = document.createElement("span");
+        tile.className = "act-icon";
+        tile.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ACTIVITY_ICONS[r.icon] || ACTIVITY_ICONS[0]}</svg>`;
+        wrap.replaceWith(tile);
+      };
+      wrap.appendChild(img);
+      if (r.smallArt) {
+        const small = document.createElement("img");
+        small.className = "act-art-small";
+        small.src = r.smallArt;
+        small.alt = "";
+        if (r.smallTitle) small.title = r.smallTitle;
+        wrap.appendChild(small);
+      }
+      li.appendChild(wrap);
+    } else {
+      const tile = document.createElement("span");
+      tile.className = "act-icon";
+      tile.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ACTIVITY_ICONS[r.icon] || ACTIVITY_ICONS[0]}</svg>`;
+      li.appendChild(tile);
+    }
+    const body = document.createElement("span");
+    body.className = "act-body";
+    const title = document.createElement("span");
+    title.className = "act-name";
+    title.textContent = r.title;
+    body.appendChild(title);
+    if (r.detail) {
+      const detail = document.createElement("span");
+      detail.className = "act-detail";
+      detail.textContent = r.detail;
+      body.appendChild(detail);
+    }
+    li.appendChild(body);
+    const time = fmtElapsed(r.start);
+    if (time) {
+      const t = document.createElement("span");
+      t.className = "act-time";
+      t.textContent = time;
+      li.appendChild(t);
+    }
+    actList.appendChild(li);
+  });
+
+  actList.hidden = actList.children.length === 0;
+}
 
 /* Turn one Lanyard presence payload into badge + dot state.
-   Priority: custom status → Spotify now-playing → game/stream → status word. */
+   The badge shows the status word (Discord-style); the activity
+   panel below carries custom status, games, and now-playing. */
 function renderPresence(data) {
+  lastPresence = data;
   const status = data.discord_status || "offline";
   dotEl.style.background = STATUS_COLORS[status] || STATUS_COLORS.offline;
   dotEl.classList.toggle("live-online", status === "online");
-
-  const acts = data.activities || [];
-  const custom = acts.find(a => a.type === 4 && a.state);       // custom status
-  const spotify = data.listening_to_spotify && data.spotify;    // now-playing
-  const game = acts.find(a => a.type !== 4 && a.type !== 2);    // game / stream / watch / compete
-
-  pillArt.classList.remove("show");
-  if (custom) {
-    pillText.textContent = custom.state;
-  } else if (spotify) {
-    pillText.textContent = `listening to ${spotify.song} — ${spotify.artist}`;
-    pillArt.src = spotify.album_art_url;
-    pillArt.classList.add("show");
-  } else if (game) {
-    pillText.textContent = `${ACTIVITY_VERBS[game.type] || "playing"} ${game.name}` +
-      (game.details ? ` · ${game.details}` : "");
-  } else if (status === "online") {
-    pillText.textContent = "online";
-  } else {
-    pillText.textContent = status === "dnd" ? "do not disturb" : status;
-  }
+  pillText.textContent = status === "dnd" ? "do not disturb" : status;
+  renderActivities(data);
 }
+
+/* Refresh elapsed times ("for 12m") every 30s while presence is live */
+let lastPresence = null;
+setInterval(() => { if (lastPresence) renderActivities(lastPresence); }, 30000);
 
 /* ---- realtime path: WebSocket to Lanyard ---- */
 let ws = null, hbTimer = null, wsTries = 0;

@@ -402,6 +402,12 @@
   }
   .views-pill svg { width: 16px; height: 16px; color: var(--pink-soft); }
   .views-pill b { color: var(--ink); font-weight: 600; }
+  .views-sub {
+    display: block;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 1px;
+  }
 
   /* ============================================================
      RESPONSIVE — small screens: tighter padding, smaller avatar
@@ -462,8 +468,8 @@
   </button>
 
   <!-- ============================================================
-       VIEWS COUNTER — static (fake) number, animated count-up.
-       Set the real value in the CONFIG below.
+       VIEWS COUNTER — REAL data from Busuanzi (free hit-counter
+       service, no account needed). Filled by the JS module below.
        ============================================================ -->
   <div class="views-pill" role="status" aria-live="polite">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -471,7 +477,10 @@
       <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
       <circle cx="12" cy="12" r="3"/>
     </svg>
-    <span><b id="viewCount">0</b> views</span>
+    <span>
+      <b id="viewCount">0</b> views
+      <span class="views-sub" id="viewUnique"></span>
+    </span>
   </div>
 
   <!-- ============================================================
@@ -512,7 +521,6 @@ const CONFIG = {
   tagline: "hey, i'm ace — streamer, gamer & certified silly goose 🃏", // short bio
   presence: "in voice chat",                   // fallback when Lanyard has no live data
   avatar: "https://cdn.discordapp.com/avatars/735574309162188822/0601178670685cc18b0ce8a3724826dd.png?size=256", // your real Discord avatar (swap anytime)
-  views: 12847,                                // fake/static visitor count
 
   /* Each link: { label, url, icon } — icon picks an SVG from
      the ICONS map below. Add new icons there if you need them. */
@@ -592,22 +600,68 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // --- views counter: animated count-up to CONFIG.views ---
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // (removed — the REAL views counter module below replaces it)
+});
+
+/* ================================================================
+   REAL VIEWS COUNTER — no more fake numbers.
+   Powered by Busuanzi (busuanzi.ibruce.info), a free hit-counter
+   service with no account needed. Returns real page views + unique
+   visitors via JSONP (script tags work from any host, even file://).
+
+   NOTE: Busuanzi batches updates server-side, so numbers can lag a
+   minute or two — real, but not instant. Want analytics-grade
+   accuracy? Swap in GoatCounter (free; needs an account) later.
+
+   If the service is unreachable, it falls back to counting on this
+   device (localStorage) so the pill never shows a fake number.
+   ================================================================ */
+(function initViews() {
   const el = document.getElementById("viewCount");
-  const target = CONFIG.views;
-  if (reduced) {
-    el.textContent = target.toLocaleString("en-US");   // skip animation
-  } else {
-    const duration = 1400;
-    const start = performance.now();
-    const ease = t => 1 - Math.pow(1 - t, 3);           // ease-out cubic
+  const uniqEl = document.getElementById("viewUnique");
+  const LS = {                                    // localStorage guard (private mode, etc.)
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  // smooth count-up animation to the real number
+  const animate = target => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) { el.textContent = target.toLocaleString("en-US"); return; }
+    const duration = 1400, start = performance.now();
+    const ease = t => 1 - Math.pow(1 - t, 3);     // ease-out cubic
     (function tick(now) {
       const p = Math.min((now - start) / duration, 1);
       el.textContent = Math.round(target * ease(p)).toLocaleString("en-US");
       if (p < 1) requestAnimationFrame(tick);
     })(start);
-  }
-});
+  };
+
+  // service unreachable → count locally on this device instead
+  const fallback = () => {
+    const n = (parseInt(LS.get("views-local") || "0", 10) || 0) + 1;
+    LS.set("views-local", String(n));
+    animate(n);
+    if (uniqEl) uniqEl.textContent = "";
+  };
+
+  const cbName = "busuanziCallback";
+  window[cbName] = data => {                      // JSONP response handler
+    cleanup();
+    const pv = data && data.page_pv != null ? Number(data.page_pv) : NaN;
+    if (!isNaN(pv)) {
+      LS.set("views-real", String(pv));           // remember last real value
+      animate(pv);
+      if (uniqEl && data.page_uv != null) uniqEl.textContent = `${Number(data.page_uv).toLocaleString("en-US")} unique`;
+    } else fallback();
+  };
+  const s = document.createElement("script");
+  s.src = "https://busuanzi.ibruce.info/busuanzi?jsonpCallback=" + cbName;
+  const cleanup = () => { delete window[cbName]; s.remove(); clearTimeout(t); };
+  const t = setTimeout(() => { if (window[cbName]) { cleanup(); fallback(); } }, 6000);
+  s.onerror = () => { if (window[cbName]) { cleanup(); fallback(); } };
+  document.body.appendChild(s);
+})();
 
 /* ================================================================
    MUSIC — a soft ambient synth-pad generated with WebAudio,

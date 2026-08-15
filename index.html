@@ -110,6 +110,8 @@
     border-radius: 50%;
     object-fit: cover;
     display: block;
+    position: relative;   /* paint the photo ABOVE the letter fallback */
+    z-index: 1;
     background: linear-gradient(135deg, var(--pink), var(--purple)); /* fallback behind transparent imgs */
   }
   /* letter fallback shown if the avatar image fails to load */
@@ -512,7 +514,9 @@
       <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">A</span>
       <!-- SWAP: put your own avatar image path here -->
       <img id="avatarImg" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd"
-           alt="Profile avatar" onerror="this.style.display='none'">
+           alt="Profile avatar"
+           onload="document.getElementById('avatarFallback').style.display='none'"
+           onerror="this.style.display='none'; document.getElementById('avatarFallback').style.display=''">
       <span class="status-dot" aria-hidden="true"></span>
     </div>
 
@@ -865,6 +869,7 @@ function syncAvatar(data) {
   if (avatarImg.getAttribute("src") !== src) {
     avatarImg.src = src;
     avatarImg.style.display = "";                    // unhide if a stale URL had hidden it
+    document.getElementById("avatarFallback").style.display = "none";  // photo takes over; onerror brings the letter back
   }
 }
 

@@ -182,70 +182,8 @@
     background: #3ddc84;
     flex-shrink: 0;
   }
-  /* ---------- pfp row: avatar + status thought-bubble side by side ---------- */
-  .pfp-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  /* ---------- custom status thought-bubble (cloud bubble next to the pfp) ---------- */
-  .status-line {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 240px;
-    padding: 9px 14px;
-    border-radius: 18px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--muted);
-    background: rgba(28, 14, 48, 0.75);
-    border: 1px solid var(--link-border);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* tail pointing at the pfp (left side, vertically centered) */
-  .status-line::before {
-    content: "";
-    position: absolute;
-    left: -9px;
-    top: 50%;
-    transform: translateY(-50%);
-    border-top: 9px solid transparent;
-    border-bottom: 9px solid transparent;
-    border-right: 9px solid var(--link-border);
-  }
-  .status-line::after {
-    content: "";
-    position: absolute;
-    left: -7px;
-    top: 50%;
-    transform: translateY(-50%);
-    border-top: 8px solid transparent;
-    border-bottom: 8px solid transparent;
-    border-right: 8px solid rgba(28, 14, 48, 0.75);
-  }
-  .status-line[hidden] { display: none; }
-  .status-line img.emoji { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
-  /* narrow screens: bubble drops below the pfp, tail flips to point up */
-  @media (max-width: 480px) {
-    .status-line::before {
-      left: 50%; top: -9px; transform: translateX(-50%);
-      border-left: 9px solid transparent; border-right: 9px solid transparent;
-      border-bottom: 9px solid var(--link-border); border-top: none;
-    }
-    .status-line::after {
-      left: 50%; top: -7px; transform: translateX(-50%);
-      border-left: 8px solid transparent; border-right: 8px solid transparent;
-      border-bottom: 8px solid rgba(28, 14, 48, 0.75); border-top: none;
-    }
-  }
+  /* ---------- bio line (shows the live Discord custom status when set) ---------- */
+  .bio img.emoji { width: 18px; height: 18px; object-fit: contain; vertical-align: -3px; }
   /* ---------- live activity panel (games / Spotify / custom status) ---------- */
   .activities {
     list-style: none;
@@ -555,19 +493,14 @@
        PROFILE CARD (content is rendered from the CONFIG in JS)
        ============================================================ -->
   <main class="page">
-    <div class="pfp-row">
-      <div class="avatar-wrap">
-        <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">A</span>
-        <!-- SWAP: put your own avatar image path here -->
-        <img id="avatarImg" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd"
-             alt="Profile avatar"
-             onload="document.getElementById('avatarFallback').style.display='none'"
-             onerror="this.style.display='none'; document.getElementById('avatarFallback').style.display=''">
-        <span class="status-dot" aria-hidden="true"></span>
-      </div>
-
-      <!-- live custom status thought-bubble ("what's on your mind"), synced from Discord -->
-      <div class="status-line" id="statusLine" hidden></div>
+    <div class="avatar-wrap">
+      <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">A</span>
+      <!-- SWAP: put your own avatar image path here -->
+      <img id="avatarImg" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd"
+           alt="Profile avatar"
+           onload="document.getElementById('avatarFallback').style.display='none'"
+           onerror="this.style.display='none'; document.getElementById('avatarFallback').style.display=''">
+      <span class="status-dot" aria-hidden="true"></span>
     </div>
 
     <h1 class="name" id="displayName">—</h1>
@@ -854,7 +787,7 @@ const dotEl = document.querySelector(".status-dot");
 const pillText = document.getElementById("presenceText");
 const actList = document.getElementById("activityList");
 const avatarImg = document.getElementById("avatarImg");
-const statusLine = document.getElementById("statusLine");
+const bioTextEl = document.getElementById("bioText");
 
 /* small stroke icons for activity rows (game / stream / listen / watch / custom / compete) */
 const ACTIVITY_ICONS = {
@@ -920,11 +853,12 @@ function syncAvatar(data) {
   }
 }
 
-/* Discord-style status line: your custom status ("what's on your mind")
-   with its emoji — updates live whenever you change it in Discord. */
+/* Live status in the bio line: your custom status ("what's on your mind")
+   shows where the tagline sits, updating live — falls back to the
+   tagline when no custom status is set. */
 function syncStatusLine(data) {
   const custom = (data.activities || []).find(a => a.type === 4 && (a.state || (a.emoji && a.emoji.name)));
-  if (!custom) { statusLine.hidden = true; statusLine.textContent = ""; return; }
+  if (!custom) { bioTextEl.textContent = CONFIG.tagline; return; }
   const emo = custom.emoji || {};
   let emojiHtml = "";
   if (emo.name) {
@@ -932,8 +866,7 @@ function syncStatusLine(data) {
       ? `<img class="emoji" alt="" src="https://cdn.discordapp.com/emojis/${emo.id}.${emo.animated ? "gif" : "png"}">`
       : `<span aria-hidden="true">${emo.name}</span> `;   // plain unicode emoji
   }
-  statusLine.innerHTML = emojiHtml + escapeHtml(custom.state || "");
-  statusLine.hidden = false;
+  bioTextEl.innerHTML = emojiHtml + escapeHtml(custom.state || "");
 }
 
 /* Build the activity panel: Spotify → games/streams/etc.

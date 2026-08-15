@@ -182,25 +182,29 @@
     background: #3ddc84;
     flex-shrink: 0;
   }
-  /* ---------- live custom status text line (synced from Discord) ---------- */
+  /* ---------- custom status bubble (Discord-style, hugs the pfp) ---------- */
   .status-line {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 5px;
     margin-top: 10px;
-    padding: 5px 14px;
-    border-radius: 999px;
-    font-size: 0.92rem;
+    padding: 3px 12px;
+    border-radius: 999px;               /* Discord's little rounded pill */
+    font-size: 0.8rem;
     font-weight: 500;
     color: var(--muted);
-    background: rgba(28, 14, 48, 0.45);
+    background: rgba(28, 14, 48, 0.55);
     border: 1px solid var(--link-border);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    max-width: 90%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .status-line[hidden] { display: none; }
-  .status-line img.emoji { width: 18px; height: 18px; object-fit: contain; }
+  .status-line img.emoji { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
   /* ---------- live activity panel (games / Spotify / custom status) ---------- */
   .activities {
     list-style: none;
@@ -520,13 +524,13 @@
       <span class="status-dot" aria-hidden="true"></span>
     </div>
 
+    <!-- live custom status bubble ("what's on your mind"), synced from Discord -->
+    <div class="status-line" id="statusLine" hidden></div>
+
     <h1 class="name" id="displayName">—</h1>
 
     <!-- Discord presence badge — status word + dot, live via Lanyard (see JS) -->
     <span class="presence"><span class="dot"></span><span id="presenceText">—</span></span>
-
-    <!-- live custom status line ("what's on your mind"), synced from Discord -->
-    <div class="status-line" id="statusLine" hidden></div>
 
     <!-- live activity panel: games, Spotify, watching (filled by JS) -->
     <ul class="activities" id="activityList" hidden></ul>

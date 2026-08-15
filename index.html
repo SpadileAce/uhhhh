@@ -182,29 +182,70 @@
     background: #3ddc84;
     flex-shrink: 0;
   }
-  /* ---------- custom status bubble (Discord-style, hugs the pfp) ---------- */
-  .status-line {
+  /* ---------- pfp row: avatar + status thought-bubble side by side ---------- */
+  .pfp-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    margin-top: 10px;
-    padding: 3px 12px;
-    border-radius: 999px;               /* Discord's little rounded pill */
-    font-size: 0.8rem;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  /* ---------- custom status thought-bubble (cloud bubble next to the pfp) ---------- */
+  .status-line {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 240px;
+    padding: 9px 14px;
+    border-radius: 18px;
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--muted);
-    background: rgba(28, 14, 48, 0.55);
+    background: rgba(28, 14, 48, 0.75);
     border: 1px solid var(--link-border);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    max-width: 90%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* tail pointing at the pfp (left side, vertically centered) */
+  .status-line::before {
+    content: "";
+    position: absolute;
+    left: -9px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-right: 9px solid var(--link-border);
+  }
+  .status-line::after {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-right: 8px solid rgba(28, 14, 48, 0.75);
+  }
   .status-line[hidden] { display: none; }
-  .status-line img.emoji { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+  .status-line img.emoji { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+  /* narrow screens: bubble drops below the pfp, tail flips to point up */
+  @media (max-width: 480px) {
+    .status-line::before {
+      left: 50%; top: -9px; transform: translateX(-50%);
+      border-left: 9px solid transparent; border-right: 9px solid transparent;
+      border-bottom: 9px solid var(--link-border); border-top: none;
+    }
+    .status-line::after {
+      left: 50%; top: -7px; transform: translateX(-50%);
+      border-left: 8px solid transparent; border-right: 8px solid transparent;
+      border-bottom: 8px solid rgba(28, 14, 48, 0.75); border-top: none;
+    }
+  }
   /* ---------- live activity panel (games / Spotify / custom status) ---------- */
   .activities {
     list-style: none;
@@ -514,18 +555,20 @@
        PROFILE CARD (content is rendered from the CONFIG in JS)
        ============================================================ -->
   <main class="page">
-    <div class="avatar-wrap">
-      <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">A</span>
-      <!-- SWAP: put your own avatar image path here -->
-      <img id="avatarImg" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd"
-           alt="Profile avatar"
-           onload="document.getElementById('avatarFallback').style.display='none'"
-           onerror="this.style.display='none'; document.getElementById('avatarFallback').style.display=''">
-      <span class="status-dot" aria-hidden="true"></span>
-    </div>
+    <div class="pfp-row">
+      <div class="avatar-wrap">
+        <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">A</span>
+        <!-- SWAP: put your own avatar image path here -->
+        <img id="avatarImg" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd"
+             alt="Profile avatar"
+             onload="document.getElementById('avatarFallback').style.display='none'"
+             onerror="this.style.display='none'; document.getElementById('avatarFallback').style.display=''">
+        <span class="status-dot" aria-hidden="true"></span>
+      </div>
 
-    <!-- live custom status bubble ("what's on your mind"), synced from Discord -->
-    <div class="status-line" id="statusLine" hidden></div>
+      <!-- live custom status thought-bubble ("what's on your mind"), synced from Discord -->
+      <div class="status-line" id="statusLine" hidden></div>
+    </div>
 
     <h1 class="name" id="displayName">—</h1>
 

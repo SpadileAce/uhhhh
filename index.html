@@ -637,30 +637,50 @@ document.addEventListener("DOMContentLoaded", () => {
     })(start);
   };
 
-  // service unreachable → count locally on this device instead
+  // service unreachable / blocked → count locally on this device instead.
+  // The pill is labeled "(local)" so it's never mistaken for the real count.
   const fallback = () => {
     const n = (parseInt(LS.get("views-local") || "0", 10) || 0) + 1;
     LS.set("views-local", String(n));
     animate(n);
-    if (uniqEl) uniqEl.textContent = "";
+    if (uniqEl) uniqEl.textContent = "(local)";
+    console.warn("Busuanzi unreachable (blocked or offline) — showing a local per-device count.");
   };
 
-  const cbName = "busuanziCallback";
-  window[cbName] = data => {                      // JSONP response handler
-    cleanup();
-    const pv = data && data.page_pv != null ? Number(data.page_pv) : NaN;
-    if (!isNaN(pv)) {
-      LS.set("views-real", String(pv));           // remember last real value
-      animate(pv);
-      if (uniqEl && data.page_uv != null) uniqEl.textContent = `${Number(data.page_uv).toLocaleString("en-US")} unique`;
-    } else fallback();
+  // ---- primary: same-origin counter worker (immune to ad-blockers) ----
+  // Requires the Cloudflare Worker in biolink-counter/ (see its README).
+  // If it's not deployed yet, falls through to busuanzi → local count.
+  const tryBusuanzi = () => {
+    const cbName = "busuanziCallback";
+    window[cbName] = data => {                      // JSONP response handler
+      cleanup();
+      const pv = data && data.page_pv != null ? Number(data.page_pv) : NaN;
+      if (!isNaN(pv)) {
+        LS.set("views-real", String(pv));           // remember last real value
+        animate(pv);
+        if (uniqEl && data.page_uv != null) uniqEl.textContent = `${Number(data.page_uv).toLocaleString("en-US")} unique`;
+        console.info(`[views] live count from busuanzi: ${pv} page views, ${data.page_uv != null ? data.page_uv + " unique" : "n/a"}`);
+      } else fallback();
+    };
+    const s = document.createElement("script");
+    s.src = "https://busuanzi.ibruce.info/busuanzi?jsonpCallback=" + cbName;
+    const cleanup = () => { delete window[cbName]; s.remove(); clearTimeout(t); };
+    const t = setTimeout(() => { if (window[cbName]) { cleanup(); fallback(); } }, 6000);
+    s.onerror = () => { if (window[cbName]) { cleanup(); fallback(); } };
+    document.body.appendChild(s);
   };
-  const s = document.createElement("script");
-  s.src = "https://busuanzi.ibruce.info/busuanzi?jsonpCallback=" + cbName;
-  const cleanup = () => { delete window[cbName]; s.remove(); clearTimeout(t); };
-  const t = setTimeout(() => { if (window[cbName]) { cleanup(); fallback(); } }, 6000);
-  s.onerror = () => { if (window[cbName]) { cleanup(); fallback(); } };
-  document.body.appendChild(s);
+
+  fetch("/api/views")
+    .then(r => { if (!r.ok) throw new Error("counter endpoint not deployed (" + r.status + ")"); return r.json(); })
+    .then(d => {
+      if (d && typeof d.views === "number") {
+        LS.set("views-real", String(d.views));      // remember last real value
+        animate(d.views);
+        if (uniqEl && d.unique != null) uniqEl.textContent = `${Number(d.unique).toLocaleString("en-US")} unique`;
+        console.info(`[views] live count from own origin: ${d.views} views, ${d.unique != null ? d.unique + " unique" : "n/a"}`);
+      } else throw new Error("bad counter payload");
+    })
+    .catch(err => { console.warn("[views] own-origin counter unavailable — " + err.message); tryBusuanzi(); });
 })();
 
 /* ================================================================

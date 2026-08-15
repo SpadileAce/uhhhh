@@ -509,9 +509,9 @@
        ============================================================ -->
   <main class="page">
     <div class="avatar-wrap">
-      <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">K</span>
+      <span class="avatar-fallback" aria-hidden="true" id="avatarFallback">A</span>
       <!-- SWAP: put your own avatar image path here -->
-      <img id="avatarImg" src="https://api.dicebear.com/9.x/lorelei/svg?seed=Kira"
+      <img id="avatarImg" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd"
            alt="Profile avatar" onerror="this.style.display='none'">
       <span class="status-dot" aria-hidden="true"></span>
     </div>
@@ -544,7 +544,7 @@ const CONFIG = {
   name: "Ace",                                 // display name
   tagline: "hey, i'm ace — streamer, gamer & certified silly goose 🃏", // short bio
   presence: "in voice chat",                   // fallback when Lanyard has no live data
-  avatar: "https://cdn.discordapp.com/avatars/735574309162188822/0601178670685cc18b0ce8a3724826dd.png?size=256", // your real Discord avatar (swap anytime)
+  avatar: "/api/avatar?h=0601178670685cc18b0ce8a3724826dd", // your Discord avatar — served from YOUR domain so nothing can block it (the h= is Discord's current avatar hash; JS updates it automatically)
 
   /* Each link: { label, url, icon } — icon picks an SVG from
      the ICONS map below. Add new icons there if you need them. */
@@ -855,12 +855,13 @@ const escapeHtml = s => String(s).replace(/[&<>"']/g,
 
 /* Keep the profile picture in sync with Discord. Lanyard reports the
    CURRENT avatar hash, so changing your avatar in Discord updates the
-   site within seconds (animated avatars load as .gif automatically). */
+   site within seconds. The image is served through our own /api/avatar
+   proxy (same origin as this page) so browser privacy features and
+   ad-blockers can never block it. */
 function syncAvatar(data) {
   const u = data.discord_user;
   if (!u || !u.avatar) return;                        // no profile data yet → keep current image
-  const ext = u.avatar.startsWith("a_") ? "gif" : "png";
-  const src = `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${ext}?size=256`;
+  const src = "/api/avatar?h=" + u.avatar;            // worker picks .png/.gif from the hash
   if (avatarImg.getAttribute("src") !== src) {
     avatarImg.src = src;
     avatarImg.style.display = "";                    // unhide if a stale URL had hidden it

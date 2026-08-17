@@ -74,9 +74,7 @@
     position: fixed;
     inset: 0;
     z-index: -1;
-    background:
-      radial-gradient(120% 90% at 50% 10%, rgba(139, 92, 246, 0.28), transparent 60%),
-      linear-gradient(165deg, rgba(255, 95, 210, 0.30), rgba(139, 92, 246, 0.38) 60%, rgba(22, 11, 38, 0.75));
+    background: transparent;   /* purple wash removed — clean video */
   }
   /* YouTube background embed — same fullscreen layer as the video */
   .bg-video.yt-embed {
@@ -701,6 +699,12 @@
               <span class="gl-ico" aria-hidden="true">🎵</span>
               <div><h3>Songs</h3><p>Background music — paste a direct audio link (.mp3)</p></div>
             </div>
+            <label class="gl-field">Music source
+              <select id="musicSource">
+                <option value="song">My song (URL / upload / YouTube)</option>
+                <option value="video">Background video's own audio</option>
+              </select>
+            </label>
             <label class="gl-field">Music URL
               <input type="text" id="musicUrl" placeholder="https://…/song.mp3  or a YouTube link">
             </label>
@@ -919,8 +923,16 @@ document.addEventListener("DOMContentLoaded", () => {
 let audioCtx = null, masterGain = null, chordTimer = null, musicOn = false;
 let musicUrl = null;          // owner-added song URL (from settings) — file mode
 let musicVolume = 0.5;        // owner-set volume (from settings)
+let musicSourceMode = "song"; // "song" | "video" — play the background video's own audio
 const bgAudio = document.getElementById("bgAudio");   // hidden player for file mode
 let ytPlayer = null, ytApiLoading = false;            // YouTube music player (IFrame API)
+
+/* Is the current background a real video FILE (not a YouTube embed)?
+   Only then can we borrow its audio track. */
+function videoIsFileBg() {
+  const bg = document.querySelector(".bg-video");
+  return !!(bg && bg.tagName === "VIDEO" && bg.style.display !== "none");
+}
 
 const CHORDS = [                       // gentle Am → Fmaj7 → Cmaj7 → G loop
   [110.00, 164.81, 220.00, 261.63, 329.63],          // A minor
@@ -930,6 +942,15 @@ const CHORDS = [                       // gentle Am → Fmaj7 → Cmaj7 → G lo
 ];
 
 function startMusic() {
+  // VIDEO-AUDIO MODE: borrow the background video's own sound (perfectly synced)
+  if (musicSourceMode === "video" && videoIsFileBg()) {
+    const v = document.querySelector(".bg-video");
+    v.volume = musicVolume;
+    v.muted = false;
+    const p = v.play();
+    if (p && p.catch) p.catch(() => {});
+    return;
+  }
   // YOUTUBE MODE: owner saved a YouTube link → play it via the official IFrame API
   if (musicUrl && isYouTubeUrl(musicUrl)) {
     const id = ytVideoId(musicUrl);
@@ -1017,6 +1038,10 @@ function startYtMusic(id) {
 }
 
 function stopMusic() {
+  if (musicSourceMode === "video" && videoIsFileBg()) {
+    document.querySelector(".bg-video").muted = true;   // keep it visible, just silent
+    return;
+  }
   if (ytPlayer) { try { ytPlayer.pauseVideo(); } catch {} }
   bgAudio.pause();
   bgAudio.removeAttribute("src");
@@ -1028,11 +1053,58 @@ function stopMusic() {
   setTimeout(() => { audioCtx.close(); audioCtx = null; }, 1200);
 }
 
+function setMusicIcon(on) {
+  const btn = document.getElementById("musicBtn");
+  btn.setAttribute("aria-pressed", String(on));
+  document.getElementById("iconMuted").style.display = on ? "none" : "";
+  document.getElementById("iconOn").style.display = on ? "" : "none";
+}
+
+/* Browsers block unmuted sound until you interact with the page once.
+   So "start on load" = start right away when allowed, otherwise start
+   the instant the visitor clicks / taps / presses a key anywhere. */
+function resumeOrStart() {
+  if (musicSourceMode === "video" && videoIsFileBg()) {
+    const v = document.querySelector(".bg-video");
+    v.volume = musicVolume;
+    v.muted = false;
+    const p = v.play();
+    if (p && p.catch) p.catch(() => {});
+  } else if (musicUrl && isYouTubeUrl(musicUrl) && ytPlayer) {
+    ytPlayer.setVolume(Math.round(musicVolume * 100));
+    try { ytPlayer.playVideo(); } catch {}
+  } else if (musicUrl) {
+    if (bgAudio.getAttribute("src") !== musicUrl) bgAudio.src = musicUrl;
+    bgAudio.volume = musicVolume;
+    const p = bgAudio.play();
+    if (p && p.catch) p.catch(() => {});
+  } else if (audioCtx && audioCtx.state === "suspended") {
+    audioCtx.resume();
+  } else if (!musicOn) {
+    try { startMusic(); } catch {}
+  }
+}
+
+function onceUserGesture(fn) {
+  const handler = () => {
+    fn();
+    document.removeEventListener("pointerdown", handler);
+    document.removeEventListener("keydown", handler);
+    document.removeEventListener("touchstart", handler);
+  };
+  document.addEventListener("pointerdown", handler);
+  document.addEventListener("keydown", handler);
+  document.addEventListener("touchstart", handler);
+}
+
+function attemptAutoStart() {
+  try { resumeOrStart(); } catch {}
+  onceUserGesture(() => { if (musicOn) resumeOrStart(); });
+}
+
 document.getElementById("musicBtn").addEventListener("click", function () {
   musicOn = !musicOn;
-  this.setAttribute("aria-pressed", String(musicOn));
-  document.getElementById("iconMuted").style.display = musicOn ? "none" : "";
-  document.getElementById("iconOn").style.display    = musicOn ? "" : "none";
+  setMusicIcon(musicOn);
   if (musicOn) startMusic(); else stopMusic();
 });
 
@@ -1356,6 +1428,7 @@ function loadSettingsIntoForm() {
       (s.links || []).forEach((l) => addLinkRow(l.label, l.url));
       if (!s.links || !s.links.length) addLinkRow("", "");
       const m = s.music || {};
+      document.getElementById("musicSource").value = m.source === "video" ? "video" : "song";
       document.getElementById("musicUrl").value = m.url || "";
       document.getElementById("musicVolume").value = m.volume ?? 0.5;
       document.getElementById("musicVolumeLabel").textContent = Math.round((m.volume ?? 0.5) * 100) + "%";
@@ -1380,8 +1453,13 @@ function applySettings(s) {
   if (s.music) {
     musicUrl = s.music.url || null;
     musicVolume = s.music.volume ?? 0.5;
+    musicSourceMode = s.music.source === "video" ? "video" : "song";
     if (masterGain) masterGain.gain.value = musicVolume;
-    if (s.music.defaultOn) { try { startMusic(); } catch {} }
+    if (s.music.defaultOn) {
+      musicOn = true;
+      setMusicIcon(true);
+      attemptAutoStart();
+    }
   }
   if (s.background) applyBackground(s.background);
 }
@@ -1494,6 +1572,7 @@ document.addEventListener("DOMContentLoaded", () => {
         links,
         music: {
           url: document.getElementById("musicUrl").value.trim(),
+          source: document.getElementById("musicSource").value,
           volume: Number(document.getElementById("musicVolume").value),
           defaultOn: document.getElementById("musicDefaultOn").checked,
         },

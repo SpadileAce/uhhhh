@@ -1067,9 +1067,24 @@ function resumeOrStart(hasGesture) {
   if (musicSourceMode === "video" && videoIsFileBg()) {
     const v = document.querySelector(".bg-video");
     v.volume = musicVolume;
-    v.muted = !hasGesture;   // load = muted (autoplay allowed, silent); sound unlocks on first interaction
-    const p = v.play();
-    if (p && p.catch) p.catch(() => {});
+    if (hasGesture) {
+      v.muted = false;
+      const p = v.play();
+      if (p && p.catch) p.catch(() => {});
+    } else {
+      // Page load: TRY with sound first. Browsers remember when a visitor has
+      // engaged with a site and then allow unmuted autoplay there — so on the
+      // owner's own browser this plays WITH AUDIO instantly. If the browser
+      // refuses (brand-new visitor), fall back to muted and unlock on the
+      // first click/tap/keypress.
+      v.muted = false;
+      const p = v.play();
+      if (p && p.catch) p.catch(() => {
+        v.muted = true;
+        const p2 = v.play();
+        if (p2 && p2.catch) p2.catch(() => {});
+      });
+    }
   } else if (musicUrl && isYouTubeUrl(musicUrl) && ytPlayer) {
     ytPlayer.setVolume(Math.round(musicVolume * 100));
     try { ytPlayer.playVideo(); } catch {}

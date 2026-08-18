@@ -1061,13 +1061,13 @@ function setMusicIcon(on) {
 }
 
 /* Browsers block unmuted sound until you interact with the page once.
-   So "start on load" = start right away when allowed, otherwise start
-   the instant the visitor clicks / taps / presses a key anywhere. */
-function resumeOrStart() {
+   So: the video starts IMMEDIATELY (muted = always allowed), and sound
+   (music or the video's own audio) unlocks on the first click/tap/key. */
+function resumeOrStart(hasGesture) {
   if (musicSourceMode === "video" && videoIsFileBg()) {
     const v = document.querySelector(".bg-video");
     v.volume = musicVolume;
-    v.muted = false;
+    v.muted = !hasGesture;   // load = muted (autoplay allowed, silent); sound unlocks on first interaction
     const p = v.play();
     if (p && p.catch) p.catch(() => {});
   } else if (musicUrl && isYouTubeUrl(musicUrl) && ytPlayer) {
@@ -1098,8 +1098,8 @@ function onceUserGesture(fn) {
 }
 
 function attemptAutoStart() {
-  try { resumeOrStart(); } catch {}
-  onceUserGesture(() => { if (musicOn) resumeOrStart(); });
+  try { resumeOrStart(false); } catch {}   // video plays muted instantly
+  onceUserGesture(() => { if (musicOn) resumeOrStart(true); });  // sound unlocks on first interaction
 }
 
 document.getElementById("musicBtn").addEventListener("click", function () {

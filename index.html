@@ -1259,6 +1259,12 @@ function syncStatusLine(data) {
   bioTextEl.hidden = false;
 }
 
+/* Discord's gateway no longer ships artwork for many games (e.g. ROBLOX),
+   so for well-known apps we supply the official icon ourselves. */
+const KNOWN_APP_ICONS = {
+  "363445589247131668": "https://www.roblox.com/favicon.ico",  // ROBLOX
+};
+
 /* Fallback tile when an activity has no artwork: Discord-style blurple
    letter tile for games (type 0), type-stroke icon for everything else. */
 function activityTile(r) {
@@ -1291,7 +1297,8 @@ function renderActivities(data) {
   // 2) everything else: games, watching, streaming, competing (with real artwork)
   acts.filter(a => a.type !== 4 && !(a.type === 2 && data.listening_to_spotify)).forEach(a => {
     const verb = ACTIVITY_VERBS[a.type] || "playing";
-    const art = resolveActivityArt(a);
+    const art = resolveActivityArt(a) ||
+      (KNOWN_APP_ICONS[a.application_id] ? { large: KNOWN_APP_ICONS[a.application_id], small: null, largeText: a.name, smallText: null } : null);
     rows.push({ icon: a.type, title: `${verb} ${a.name}`, detail: a.details || a.state || "",
                 art: art && art.large, smallArt: art && art.small,
                 artTitle: art && art.largeText, smallTitle: art && art.smallText,

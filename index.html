@@ -749,7 +749,7 @@
   <div class="gate" id="entranceGate" role="button" tabindex="0" aria-label="Tap to enter Ace's page">
     <div class="gate-inner">
       <img id="gateAvatar" class="gate-avatar" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd" alt="Ace">
-      <h1 class="gate-name">Ace ✦ links</h1>
+      <h1 class="gate-name">Ace</h1>
       <p class="gate-sub">tap to enter <span class="gate-paw">🐾</span></p>
     </div>
   </div>
@@ -844,6 +844,7 @@ const CONFIG = {
     { label: "Discord",   url: "https://discord.com/users/735574309162188822", icon: "discord" },
     { label: "Instagram", url: "https://www.instagram.com/spadilleace/",       icon: "instagram" },
     { label: "Twitch",    url: "https://www.twitch.tv/spadilleace",            icon: "twitch" },
+    { label: "Roblox",    url: "https://www.roblox.com/users/1008989546/profile", icon: "roblox" },
   ],
 };
 
@@ -856,6 +857,7 @@ const ICONS = {
   instagram: { stroke: true, markup: '<rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/>' },
   twitch: { d: "M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" },
   link: { stroke: true, markup: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="3.5" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>' },
+  roblox: { stroke: true, markup: '<rect x="6.2" y="6.2" width="11.6" height="11.6" rx="3" transform="rotate(45 12 12)"/><rect x="10.2" y="10.2" width="3.6" height="3.6" rx="1" fill="currentColor" stroke="none" transform="rotate(45 12 12)"/>' },
 };
 
 /* Draw the link buttons from an array of {label, url, icon}. */
@@ -1722,7 +1724,8 @@ function hideGate() {
   entranceGate.setAttribute("aria-hidden", "true");
 }
 
-function enterSite() {
+function enterSite(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }  // keep the tap from reaching links underneath
   hideGate();
   try { resumeOrStart(true); } catch {}   // gesture → sound on right now
 }
@@ -1735,8 +1738,10 @@ function gateInit() {
     document.querySelector(".bg-video").muted = true;
   }
   entranceGate.addEventListener("pointerdown", enterSite);
+  // Belt & braces: swallow any click that still lands on the gate while it fades.
+  entranceGate.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); });
   entranceGate.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); enterSite(); }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); enterSite(e); }
   });
   // If the owner jumps to #owner while the gate is up, get out of the way.
   window.addEventListener("hashchange", () => {

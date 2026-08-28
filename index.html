@@ -461,6 +461,70 @@
     overflow-y: auto;
   }
   .owner-overlay[hidden] { display: none; }
+  /* ============================================================
+     ENTRANCE GATE — guns.lol-style "tap to enter" screen.
+     The tap counts as the browser's required user gesture, so the
+     video + audio start together the moment the visitor enters.
+     ============================================================ */
+  .gate {
+    position: fixed;
+    inset: 0;
+    z-index: 55;                 /* above the page, below the owner screen */
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    background:
+      radial-gradient(120% 90% at 50% 12%, rgba(139, 92, 246, 0.45), transparent 60%),
+      linear-gradient(165deg, #1a0b2e, #2d0f45 55%, #14062a);
+    transition: opacity 0.45s ease, visibility 0.45s ease;
+  }
+  .gate.gate-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .gate-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    text-align: center;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .gate-avatar {
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 0 0 4px rgba(255, 158, 230, 0.35), 0 12px 40px rgba(139, 92, 246, 0.5);
+    animation: gateFloat 3.2s ease-in-out infinite;
+  }
+  @keyframes gateFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-9px); }
+  }
+  .gate-name {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, var(--pink-soft), #fff 50%, var(--purple-soft));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .gate-sub {
+    margin: 0;
+    font-size: 1.05rem;
+    color: rgba(255, 255, 255, 0.85);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: gatePulse 1.8s ease-in-out infinite;
+  }
+  @keyframes gatePulse {
+    0%, 100% { opacity: 0.75; }
+    50%      { opacity: 1; }
+  }
+  .gate-paw { font-size: 1.3rem; }
+
   .owner-card {
     position: relative;
     width: min(680px, 100%);
@@ -681,6 +745,15 @@
        OWNER SCREEN — hidden until you visit yoursite.com/#owner.
        Locked to YOUR Discord account (no password stored here).
        ============================================================ -->
+  <!-- Entrance gate — guns.lol style: tap to enter (also unlocks audio) -->
+  <div class="gate" id="entranceGate" role="button" tabindex="0" aria-label="Tap to enter Ace's page">
+    <div class="gate-inner">
+      <img id="gateAvatar" class="gate-avatar" src="/api/avatar?h=0601178670685cc18b0ce8a3724826dd" alt="Ace">
+      <h1 class="gate-name">Ace ✦ links</h1>
+      <p class="gate-sub">tap to enter <span class="gate-paw">🐾</span></p>
+    </div>
+  </div>
+
   <div class="owner-overlay" id="ownerOverlay" hidden>
     <div class="owner-card">
       <button class="owner-close" id="ownerClose" type="button" aria-label="Close">✕</button>
@@ -1228,6 +1301,8 @@ function syncAvatar(data) {
   const src = "/api/avatar?h=" + u.avatar;            // worker picks .png/.gif from the hash
   if (avatarImg.getAttribute("src") !== src) {
     avatarImg.src = src;
+    const gateAvatar = document.getElementById("gateAvatar");
+    if (gateAvatar) gateAvatar.src = src;
     avatarImg.style.display = "";                    // unhide if a stale URL had hidden it
     document.getElementById("avatarFallback").style.display = "none";  // photo takes over; onerror brings the letter back
   }
@@ -1632,6 +1707,43 @@ document.addEventListener("DOMContentLoaded", () => {
     if (location.hash === "#owner") showOwnerScreen();
   });
 });
+
+/* ---- Entrance gate (guns.lol style) ----
+   The tap/click IS the user gesture browsers require, so entering
+   immediately starts the video WITH its audio — no second click. */
+const entranceGate = document.getElementById("entranceGate");
+let gateDone = false;
+
+function hideGate() {
+  if (gateDone) return;
+  gateDone = true;
+  entranceGate.classList.add("gate-hidden");
+  entranceGate.removeAttribute("tabindex");
+  entranceGate.setAttribute("aria-hidden", "true");
+}
+
+function enterSite() {
+  hideGate();
+  try { resumeOrStart(true); } catch {}   // gesture → sound on right now
+}
+
+function gateInit() {
+  // Owner screen: never gate it — go straight in.
+  if (location.hash === "#owner") { hideGate(); return; }
+  // While the gate is up the video must stay silent (no sound before entering).
+  if (musicSourceMode === "video" && videoIsFileBg()) {
+    document.querySelector(".bg-video").muted = true;
+  }
+  entranceGate.addEventListener("pointerdown", enterSite);
+  entranceGate.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); enterSite(); }
+  });
+  // If the owner jumps to #owner while the gate is up, get out of the way.
+  window.addEventListener("hashchange", () => {
+    if (location.hash === "#owner") hideGate();
+  });
+}
+document.addEventListener("DOMContentLoaded", gateInit);
 
 document.addEventListener("DOMContentLoaded", () => { pollREST(); startWS(); });
 </script>
